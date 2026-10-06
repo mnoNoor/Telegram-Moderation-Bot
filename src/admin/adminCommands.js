@@ -34,63 +34,47 @@ const adminCommands = (bot) => {
     return admin;
   };
 
+  const mainReplyKeyboard = () =>
+    Markup.keyboard([
+      ["📝 Ban Words", "📞 Numbers"],
+      ["👥 Admins", "📊 Stats"],
+      ["❌ Close"],
+    ]).resize();
+
+  const banWordsReplyKeyboard = () =>
+    Markup.keyboard([
+      ["➕ Add Ban Word", "📋 Ban Words List"],
+      ["🗑️ Remove Ban Word"],
+      ["⬅️ Back", "❌ Close"],
+    ]).resize();
+
+  const numbersReplyKeyboard = () =>
+    Markup.keyboard([
+      ["➕ Add Number", "📋 Numbers List"],
+      ["🗑️ Remove Number"],
+      ["⬅️ Back", "❌ Close"],
+    ]).resize();
+
+  const adminsReplyKeyboard = () =>
+    Markup.keyboard([
+      ["➕ Add Admin", "📋 Admins List"],
+      ["🗑️ Remove Admin"],
+      ["⬅️ Back", "❌ Close"],
+    ]).resize();
+
+  const statsReplyKeyboard = () =>
+    Markup.keyboard([
+      ["📝 Ban Words Stats", "📞 Numbers Stats"],
+      ["👥 Admins Stats"],
+      ["⬅️ Back", "❌ Close"],
+    ]).resize();
+
+  const cancelReplyKeyboard = () => Markup.keyboard([["❌ Cancel"]]).resize();
+
   const backRow = [
     Markup.button.callback("⬅️ Back", "menu_main"),
     Markup.button.callback("❌ Close", "menu_close"),
   ];
-
-  const mainMenuKeyboard = () =>
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("📝 Ban Words", "menu_banwords"),
-        Markup.button.callback("📞 Numbers", "menu_numbers"),
-      ],
-      [
-        Markup.button.callback("👥 Admins", "menu_admins"),
-        Markup.button.callback("📊 Stats", "menu_stats"),
-      ],
-      [Markup.button.callback("❌ Close", "menu_close")],
-    ]);
-
-  const banWordsMenuKeyboard = () =>
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("➕ Add Word", "banword_add"),
-        Markup.button.callback("📋 List", "banword_list:0"),
-      ],
-      [Markup.button.callback("🗑️ Remove Word", "banword_remove_list:0")],
-      backRow,
-    ]);
-
-  const numbersMenuKeyboard = () =>
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("➕ Add Number", "number_add"),
-        Markup.button.callback("📋 List", "number_list:0"),
-      ],
-      [Markup.button.callback("🗑️ Remove Number", "number_remove_list:0")],
-      backRow,
-    ]);
-
-  const adminsMenuKeyboard = () =>
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("➕ Add Admin", "admin_add"),
-        Markup.button.callback("📋 List", "admin_list"),
-      ],
-      [Markup.button.callback("🗑️ Remove Admin", "admin_remove_list")],
-      backRow,
-    ]);
-
-  const statsMenuKeyboard = () =>
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("📝 Ban Words", "stats_banwords"),
-        Markup.button.callback("📞 Numbers", "stats_numbers"),
-      ],
-      [Markup.button.callback("👥 Admins", "stats_admins")],
-      backRow,
-    ]);
 
   const backOnlyKeyboard = (backTo = "menu_main") =>
     Markup.inlineKeyboard([
@@ -145,7 +129,7 @@ const adminCommands = (bot) => {
     const admin = await getAdmin(ctx.from.id);
     if (!admin) return ctx.reply("❌ You are not an admin.");
 
-    await ctx.reply("⚙️ Admin Panel", mainMenuKeyboard());
+    await ctx.reply("⚙️ Admin Panel", mainReplyKeyboard());
   });
 
   bot.action("noop", (ctx) => ctx.answerCbQuery());
@@ -153,9 +137,8 @@ const adminCommands = (bot) => {
   bot.action("menu_main", async (ctx) => {
     if (!(await requireAdmin(ctx))) return;
     await ctx.answerCbQuery();
-    await ctx
-      .editMessageText("⚙️ Admin Panel", mainMenuKeyboard())
-      .catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    await ctx.reply("⚙️ Admin Panel", mainReplyKeyboard());
   });
 
   bot.action("menu_close", async (ctx) => {
@@ -166,33 +149,29 @@ const adminCommands = (bot) => {
   bot.action("menu_banwords", async (ctx) => {
     if (!(await requireAdmin(ctx))) return;
     await ctx.answerCbQuery();
-    await ctx
-      .editMessageText("📝 Ban Words Management", banWordsMenuKeyboard())
-      .catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    await ctx.reply("📝 Ban Words Management", banWordsReplyKeyboard());
   });
 
   bot.action("menu_numbers", async (ctx) => {
     if (!(await requireAdmin(ctx))) return;
     await ctx.answerCbQuery();
-    await ctx
-      .editMessageText("📞 Numbers Management", numbersMenuKeyboard())
-      .catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    await ctx.reply("📞 Numbers Management", numbersReplyKeyboard());
   });
 
   bot.action("menu_admins", async (ctx) => {
     if (!(await requireSuperAdmin(ctx))) return;
     await ctx.answerCbQuery();
-    await ctx
-      .editMessageText("👥 Admins Management", adminsMenuKeyboard())
-      .catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    await ctx.reply("👥 Admins Management", adminsReplyKeyboard());
   });
 
   bot.action("menu_stats", async (ctx) => {
     if (!(await requireAdmin(ctx))) return;
     await ctx.answerCbQuery();
-    await ctx
-      .editMessageText("📊 Statistics", statsMenuKeyboard())
-      .catch(() => {});
+    await ctx.deleteMessage().catch(() => {});
+    await ctx.reply("📊 Statistics", statsReplyKeyboard());
   });
 
   bot.action("stats_banwords", async (ctx) => {
@@ -222,72 +201,6 @@ const adminCommands = (bot) => {
     await ctx.answerCbQuery();
     await ctx
       .editMessageText(`👥 Admins: ${count}`, backOnlyKeyboard("menu_stats"))
-      .catch(() => {});
-  });
-
-  bot.action("banword_add", async (ctx) => {
-    if (!(await requireAdmin(ctx))) return;
-    waitingForBanPhrase[ctx.from.id] = true;
-    await ctx.answerCbQuery();
-    await ctx
-      .editMessageText(
-        "✍️ Send the word or phrase you want to ban:",
-        Markup.inlineKeyboard([
-          Markup.button.callback("❌ Cancel", "cancel_ban"),
-        ]),
-      )
-      .catch(() => {});
-  });
-
-  bot.action("number_add", async (ctx) => {
-    if (!(await requireAdmin(ctx))) return;
-    waitingForAllowedNumber[ctx.from.id] = true;
-    await ctx.answerCbQuery();
-    await ctx
-      .editMessageText(
-        "🔢 Send the number you want to allow:",
-        Markup.inlineKeyboard([
-          Markup.button.callback("❌ Cancel", "cancel_number"),
-        ]),
-      )
-      .catch(() => {});
-  });
-
-  bot.action("admin_add", async (ctx) => {
-    if (!(await requireSuperAdmin(ctx))) return;
-    waitingForAdminId[ctx.from.id] = true;
-    await ctx.answerCbQuery();
-    await ctx
-      .editMessageText(
-        "👤 Send the Telegram ID of the new admin:",
-        Markup.inlineKeyboard([
-          Markup.button.callback("❌ Cancel", "cancel_admin"),
-        ]),
-      )
-      .catch(() => {});
-  });
-
-  bot.action("cancel_ban", async (ctx) => {
-    delete waitingForBanPhrase[ctx.from.id];
-    await ctx.answerCbQuery("Cancelled");
-    await ctx
-      .editMessageText("📝 Ban Words Management", banWordsMenuKeyboard())
-      .catch(() => {});
-  });
-
-  bot.action("cancel_number", async (ctx) => {
-    delete waitingForAllowedNumber[ctx.from.id];
-    await ctx.answerCbQuery("Cancelled");
-    await ctx
-      .editMessageText("📞 Numbers Management", numbersMenuKeyboard())
-      .catch(() => {});
-  });
-
-  bot.action("cancel_admin", async (ctx) => {
-    delete waitingForAdminId[ctx.from.id];
-    await ctx.answerCbQuery("Cancelled");
-    await ctx
-      .editMessageText("👥 Admins Management", adminsMenuKeyboard())
       .catch(() => {});
   });
 
@@ -618,6 +531,30 @@ const adminCommands = (bot) => {
       .catch(() => {});
   });
 
+  bot.hears("❌ Cancel", async (ctx, next) => {
+    const userId = ctx.from.id;
+
+    if (waitingForBanPhrase[userId]) {
+      delete waitingForBanPhrase[userId];
+      await ctx.reply("Cancelled", banWordsReplyKeyboard());
+      return;
+    }
+
+    if (waitingForAllowedNumber[userId]) {
+      delete waitingForAllowedNumber[userId];
+      await ctx.reply("Cancelled", numbersReplyKeyboard());
+      return;
+    }
+
+    if (waitingForAdminId[userId]) {
+      delete waitingForAdminId[userId];
+      await ctx.reply("Cancelled", adminsReplyKeyboard());
+      return;
+    }
+
+    return next();
+  });
+
   bot.on("text", async (ctx, next) => {
     if (ctx.chat.type !== "private") return next();
 
@@ -634,39 +571,18 @@ const adminCommands = (bot) => {
       delete waitingForBanPhrase[userId];
 
       if (!phrase) {
-        return ctx.reply(
-          "❌ Invalid phrase.",
-          Markup.inlineKeyboard([
-            [
-              Markup.button.callback("⬅️ Back", "menu_banwords"),
-              Markup.button.callback("❌ Close", "menu_close"),
-            ],
-          ]),
-        );
+        return ctx.reply("❌ Invalid phrase.", banWordsReplyKeyboard());
       }
 
       try {
         await BanWord.create({ word: phrase });
         await ctx.reply(
           `✅ Phrase added:\n"${phrase}"`,
-          Markup.inlineKeyboard([
-            [
-              Markup.button.callback("⬅️ Back", "menu_banwords"),
-              Markup.button.callback("❌ Close", "menu_close"),
-            ],
-          ]),
+          banWordsReplyKeyboard(),
         );
       } catch (error) {
         if (error.code === 11000) {
-          await ctx.reply(
-            "⚠️ Phrase already exists.",
-            Markup.inlineKeyboard([
-              [
-                Markup.button.callback("⬅️ Back", "menu_banwords"),
-                Markup.button.callback("❌ Close", "menu_close"),
-              ],
-            ]),
-          );
+          await ctx.reply("⚠️ Phrase already exists.", banWordsReplyKeyboard());
         } else {
           await ctx.reply("❌ Failed to save phrase.");
           console.log(error);
@@ -688,12 +604,7 @@ const adminCommands = (bot) => {
       if (!numberValue || numberValue.length < 6) {
         return ctx.reply(
           "❌ Please send a valid number (at least 6 digits).",
-          Markup.inlineKeyboard([
-            [
-              Markup.button.callback("⬅️ Back", "menu_numbers"),
-              Markup.button.callback("❌ Close", "menu_close"),
-            ],
-          ]),
+          numbersReplyKeyboard(),
         );
       }
 
@@ -701,23 +612,13 @@ const adminCommands = (bot) => {
         await NumberModel.create({ value: numberValue });
         await ctx.reply(
           `✅ Number ${numberValue} allowed.`,
-          Markup.inlineKeyboard([
-            [
-              Markup.button.callback("⬅️ Back", "menu_numbers"),
-              Markup.button.callback("❌ Close", "menu_close"),
-            ],
-          ]),
+          numbersReplyKeyboard(),
         );
       } catch (error) {
         if (error.code === 11000) {
           await ctx.reply(
             "⚠️ This number is already allowed.",
-            Markup.inlineKeyboard([
-              [
-                Markup.button.callback("⬅️ Back", "menu_numbers"),
-                Markup.button.callback("❌ Close", "menu_close"),
-              ],
-            ]),
+            numbersReplyKeyboard(),
           );
         } else {
           await ctx.reply("❌ Failed to save number.");
@@ -742,38 +643,17 @@ const adminCommands = (bot) => {
       delete waitingForAdminId[userId];
 
       if (!Number.isInteger(newId) || newId <= 0) {
-        return ctx.reply(
-          "❌ Invalid Telegram ID.",
-          Markup.inlineKeyboard([
-            [
-              Markup.button.callback("⬅️ Back", "menu_admins"),
-              Markup.button.callback("❌ Close", "menu_close"),
-            ],
-          ]),
-        );
+        return ctx.reply("❌ Invalid Telegram ID.", adminsReplyKeyboard());
       }
 
       try {
         await Admin.create({ telegramId: newId, role: "admin" });
-        await ctx.reply(
-          `✅ Admin ${newId} added.`,
-          Markup.inlineKeyboard([
-            [
-              Markup.button.callback("⬅️ Back", "menu_admins"),
-              Markup.button.callback("❌ Close", "menu_close"),
-            ],
-          ]),
-        );
+        await ctx.reply(`✅ Admin ${newId} added.`, adminsReplyKeyboard());
       } catch (error) {
         if (error.code === 11000) {
           await ctx.reply(
             "⚠️ This user is already an admin.",
-            Markup.inlineKeyboard([
-              [
-                Markup.button.callback("⬅️ Back", "menu_admins"),
-                Markup.button.callback("❌ Close", "menu_close"),
-              ],
-            ]),
+            adminsReplyKeyboard(),
           );
         } else {
           await ctx.reply("❌ Failed to add admin.");
@@ -784,6 +664,241 @@ const adminCommands = (bot) => {
     }
 
     return next();
+  });
+
+  bot.hears("📝 Ban Words", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    await ctx.reply("📝 Ban Words Management", banWordsReplyKeyboard());
+  });
+
+  bot.hears("📞 Numbers", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    await ctx.reply("📞 Numbers Management", numbersReplyKeyboard());
+  });
+
+  bot.hears("👥 Admins", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin || admin.role !== "superAdmin") {
+      return ctx.reply("❌ SuperAdmin only");
+    }
+    await ctx.reply("👥 Admins Management", adminsReplyKeyboard());
+  });
+
+  bot.hears("📊 Stats", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    await ctx.reply("📊 Statistics", statsReplyKeyboard());
+  });
+
+  bot.hears("➕ Add Ban Word", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    waitingForBanPhrase[ctx.from.id] = true;
+    await ctx.reply(
+      "✍️ Send the word or phrase you want to ban:",
+      cancelReplyKeyboard(),
+    );
+  });
+
+  bot.hears("📋 Ban Words List", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+
+    const words = await BanWord.find().sort({ word: 1 }).lean();
+    if (!words.length) {
+      return ctx.reply("📋 No ban words yet.", banWordsReplyKeyboard());
+    }
+
+    const list = words.map((w) => w.word);
+    await ctx.reply(
+      `📋 Ban Words (${words.length}):`,
+      buildPaginatedListKeyboard(
+        list,
+        0,
+        "banword_list",
+        null,
+        "menu_banwords",
+      ),
+    );
+  });
+
+  bot.hears("🗑️ Remove Ban Word", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+
+    const words = await BanWord.find().sort({ word: 1 }).lean();
+    if (!words.length) {
+      return ctx.reply("📋 No ban words to remove.", banWordsReplyKeyboard());
+    }
+
+    listSessions[ctx.from.id] = {
+      type: "banword",
+      ids: words.map((w) => w._id.toString()),
+    };
+
+    const list = words.map((w) => w.word);
+    await ctx.reply(
+      `🗑️ Tap a word to remove it (${words.length}):`,
+      buildPaginatedListKeyboard(
+        list,
+        0,
+        "banword_remove_list",
+        "banword_del",
+        "menu_banwords",
+      ),
+    );
+  });
+
+  bot.hears("➕ Add Number", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    waitingForAllowedNumber[ctx.from.id] = true;
+    await ctx.reply(
+      "🔢 Send the number you want to allow:",
+      cancelReplyKeyboard(),
+    );
+  });
+
+  bot.hears("📋 Numbers List", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+
+    const numbers = await NumberModel.find().sort({ value: 1 }).lean();
+    if (!numbers.length) {
+      return ctx.reply("📋 No allowed numbers yet.", numbersReplyKeyboard());
+    }
+
+    const list = numbers.map((n) => n.value);
+    await ctx.reply(
+      `📋 Allowed Numbers (${numbers.length}):`,
+      buildPaginatedListKeyboard(list, 0, "number_list", null, "menu_numbers"),
+    );
+  });
+
+  bot.hears("🗑️ Remove Number", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+
+    const numbers = await NumberModel.find().sort({ value: 1 }).lean();
+    if (!numbers.length) {
+      return ctx.reply("📋 No numbers to remove.", numbersReplyKeyboard());
+    }
+
+    listSessions[ctx.from.id] = {
+      type: "number",
+      ids: numbers.map((n) => n._id.toString()),
+    };
+
+    const list = numbers.map((n) => n.value);
+    await ctx.reply(
+      `🗑️ Tap a number to remove it (${numbers.length}):`,
+      buildPaginatedListKeyboard(
+        list,
+        0,
+        "number_remove_list",
+        "number_del",
+        "menu_numbers",
+      ),
+    );
+  });
+
+  bot.hears("➕ Add Admin", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin || admin.role !== "superAdmin") {
+      return ctx.reply("❌ SuperAdmin only");
+    }
+    waitingForAdminId[ctx.from.id] = true;
+    await ctx.reply(
+      "👤 Send the Telegram ID of the new admin:",
+      cancelReplyKeyboard(),
+    );
+  });
+
+  bot.hears("📋 Admins List", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin || admin.role !== "superAdmin") {
+      return ctx.reply("❌ SuperAdmin only");
+    }
+
+    const admins = await Admin.find().sort({ telegramId: 1 }).lean();
+    if (!admins.length) {
+      return ctx.reply("📋 No admins yet.", adminsReplyKeyboard());
+    }
+
+    const lines = admins
+      .map((a, i) => `${i + 1}. ${a.telegramId} — ${a.role}`)
+      .join("\n");
+
+    await ctx.reply(
+      `👥 Admins (${admins.length}):\n\n${lines}`,
+      adminsReplyKeyboard(),
+    );
+  });
+
+  bot.hears("🗑️ Remove Admin", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin || admin.role !== "superAdmin") {
+      return ctx.reply("❌ SuperAdmin only");
+    }
+
+    const admins = await Admin.find().sort({ telegramId: 1 }).lean();
+    if (!admins.length) {
+      return ctx.reply("📋 No admins to remove.", adminsReplyKeyboard());
+    }
+
+    listSessions[ctx.from.id] = {
+      type: "admin",
+      ids: admins.map((a) => a._id.toString()),
+    };
+
+    const rows = admins.map((a, idx) => [
+      Markup.button.callback(
+        `🗑️ ${a.telegramId} (${a.role})`,
+        `admin_del:${idx}`,
+      ),
+    ]);
+    rows.push([
+      Markup.button.callback("⬅️ Back", "menu_admins"),
+      Markup.button.callback("❌ Close", "menu_close"),
+    ]);
+
+    await ctx.reply(
+      `🗑️ Tap an admin to remove it (${admins.length}):`,
+      Markup.inlineKeyboard(rows),
+    );
+  });
+
+  bot.hears("📝 Ban Words Stats", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    const count = await BanWord.countDocuments();
+    await ctx.reply(`📝 Ban Words: ${count}`, statsReplyKeyboard());
+  });
+
+  bot.hears("📞 Numbers Stats", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    const count = await NumberModel.countDocuments();
+    await ctx.reply(`📞 Allowed Numbers: ${count}`, statsReplyKeyboard());
+  });
+
+  bot.hears("👥 Admins Stats", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    const count = await Admin.countDocuments();
+    await ctx.reply(`👥 Admins: ${count}`, statsReplyKeyboard());
+  });
+
+  bot.hears("⬅️ Back", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    await ctx.reply("⚙️ Admin Panel", mainReplyKeyboard());
+  });
+
+  bot.hears("❌ Close", async (ctx) => {
+    await ctx.reply("تم الإغلاق", Markup.removeKeyboard());
   });
 };
 

@@ -1,4 +1,3 @@
-// createSuperAdmin.js
 const mongoose = require("mongoose");
 const Admin = require("../models/Admin.js");
 

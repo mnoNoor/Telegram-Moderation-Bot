@@ -1,4 +1,3 @@
-// allowedNumbers.js
 const NumberModel = require("../models/Number");
 const { normalizeNumber } = require("../normalization/normalizeNumber");
 
