@@ -1,78 +1,116 @@
 # UPM Admin Bot
 
-Telegram moderation bot with spam detection, banned words, and phone number filtering.
+UPM Admin Bot is a Telegram moderation bot for managing group safety and admin operations. It helps detect spam, banned phrases, unauthorized numbers, coded messages, and contact-based abuse, while giving admins a private dashboard to manage moderation rules.
 
 ## Features
 
-- 🛡️ Multi-layer protection: banned words, phone numbers, spam, coded messages
-- 👮 Admin panel (private chat): add banned words / allowed numbers
-- 🤖 Auto-superAdmin on first use
-- 🌐 Webhook (prod) & polling (dev) support
+- 🛡️ Multi-layer moderation checks
+- 🚫 Banned word management
+- 📞 Allowed-number management
+- 🤖 Admin and super-admin roles
+- 🧹 Spam and suspicious message handling
+- 🔐 Private admin panel via `/admin`
+- 🌐 Production webhook support and local polling mode
+
+## Requirements
+
+- Node.js
+- MongoDB
+- Telegram Bot Token
+
+## Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+BOT_TOKEN=your_telegram_bot_token
+MONGO_URI=mongodb://localhost:27017/upm-admin
+NODE_ENV=development
+PORT=3000
+
+# Optional for production webhook mode
+WEBHOOK_BASE_URL=https://your-domain.com
+WEBHOOK_SECRET=your_secret_token
+```
 
 ## Quick Start
+
+1. Install dependencies:
 
 ```bash
 npm install
 ```
 
-**.env**
-
-```env
-BOT_TOKEN=xxx
-MONGO_URI=xxx
-NODE_ENV=development
-PORT=3000
-```
+2. Create the super-admin user by setting your Telegram user ID in the script and running:
 
 ```bash
-node addAdmin.js  # creates superAdmin (edit ID in file)
-npm run dev       # polling mode
+node --env-file=.env src/admin/addAdmin.js
 ```
 
-## Deploy on Render
+3. Start the bot:
 
-1. Push code to GitHub
-2. Create new **Web Service** on Render
-3. Connect repo, set:
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
+```bash
+npm start
+```
+
+When `NODE_ENV` is not set to `production`, the bot runs in polling mode by default.
+
+## Production Deployment
+
+For Render or any similar hosting platform:
+
+1. Push the project to GitHub.
+2. Create a new Web Service.
+3. Configure:
+   - Build Command: `npm install`
+   - Start Command: `npm start`
 4. Add environment variables:
    - `BOT_TOKEN`
    - `MONGO_URI`
    - `NODE_ENV=production`
    - `WEBHOOK_BASE_URL=https://your-app.onrender.com`
-5. Deploy ✅
+   - `WEBHOOK_SECRET=some-random-secret`
+5. Deploy.
 
-Bot auto-configures webhook on startup.
+The app will set Telegram webhook automatically in production mode.
 
 ## Moderation Flow
 
-Messages checked for: banned words → spam (3+ repeats) → unapproved numbers → coded chars → shared contacts → username violations.
+Incoming messages pass through the moderation pipeline in this order:
 
-**Groups:** violators banned • **Private:** message deleted + warning
+- message reading / cleanup
+- spam detection
+- allowed-number checks
+- coded-message detection
+- allowed-contact checks
 
-## Commands
+## Admin Commands
 
-- `/admin` – open admin panel (private only)
-- Keyboard buttons to add banned words & allowed numbers
+- `/admin` — open the admin panel in a private chat
+- Keyboard actions for:
+  - add/remove banned words
+  - add/remove allowed numbers
+  - list current rules
+  - manage admin users
+  - view basic stats
 
-## Structure
+## Project Structure
 
-```
-index.js                # entry
-server.js               # webhook/polling setup
+```text
 src/
 ├── admin/
+│   ├── addAdmin.js
 │   └── adminCommands.js
-├── middleware/          # 6 moderation layers
-├── models/              # Admin, BanWord, Number
-├── normalization/       # Arabic/text cleaners
-└── config/
-    └── db.js
+├── config/
+│   └── db.js
+├── middleware/
+├── models/
+├── normalization/
+├── index.js
+├── server.js
+└── ...
 ```
 
----
-
-## License:
+## License
 
 [MIT License](LICENSE)
