@@ -1,6 +1,6 @@
 {
   "name": "upm-admin",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "UPM Admin Bot",
   "main": "index.js",
   "scripts": {
