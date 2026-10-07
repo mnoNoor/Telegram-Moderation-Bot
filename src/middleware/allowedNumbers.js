@@ -67,7 +67,9 @@ const isAllowedNumber = async (ctx, next) => {
 
     try {
       await ctx.deleteMessage();
-      await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id);
+      await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
+        revoke_messages: true,
+      });
 
       const username = ctx.from.username
         ? `@${ctx.from.username}`

@@ -8,7 +8,7 @@ const { spamHandler } = require("./middleware/spamHandler.js");
 const { isAllowedNumber } = require("./middleware/allowedNumbers.js");
 const { isMessageCoded } = require("./middleware/isMessageCoded.js");
 const { isAllowedContact } = require("./middleware/allowedContact.js");
-// const { checkUserName } = require("./middleware/checkUserName.js");
+const { checkUserName } = require("./middleware/checkUserName.js");
 
 const app = express();
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -26,7 +26,7 @@ adminCommands(bot);
 
 bot.on(
   "message",
-  // checkUserName,
+  checkUserName,
   readMessages,
   spamHandler,
   isAllowedNumber,

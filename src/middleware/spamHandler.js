@@ -80,7 +80,9 @@ const spamHandler = async (ctx, next) => {
   }
 
   try {
-    await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id);
+    await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
+      revoke_messages: true,
+    });
 
     for (const id of data.messageIds) {
       try {
