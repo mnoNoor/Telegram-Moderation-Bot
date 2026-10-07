@@ -1,5 +1,6 @@
 const BanWord = require("../models/BanWord");
 const { normalize } = require("../normalization/normalizedText");
+const { banUser } = require("../services/banService");
 
 const readMessages = async (ctx, next) => {
   if (!ctx.message?.text) return next();
@@ -18,24 +19,8 @@ const readMessages = async (ctx, next) => {
     if (!word) continue;
 
     if (normalizedText.includes(word)) {
-      try {
-        await ctx.deleteMessage();
-        await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
-          revoke_messages: true,
-        });
-
-        const username = ctx.from.username
-          ? `@${ctx.from.username}`
-          : "unknown user";
-
-        console.log(
-          `${ctx.from.id}, (${username}) got banned because of blocked word: ${word} in message`,
-        );
-        return;
-      } catch (error) {
-        console.error("Error deleting message:", error);
-        return;
-      }
+      await banUser(ctx, { reason: "banned_word", matchedWord: word });
+      return;
     }
   }
 

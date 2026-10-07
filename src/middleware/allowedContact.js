@@ -1,26 +1,15 @@
 const NumberModel = require("../models/Number");
 const { normalizeNumber } = require("../normalization/normalizeNumber");
+const { banUser } = require("../services/banService");
 
 const isGroup = (ctx) =>
   ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
 
-const punish = async (ctx) => {
-  try {
-    await ctx.deleteMessage();
-    await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
-      revoke_messages: true,
-    });
-
-    const username = ctx.from.username
-      ? `@${ctx.from.username}`
-      : "unknown user";
-
-    console.log(
-      `${ctx.from.id}, (${username}) got banned because of contact sharing`,
-    );
-  } catch (error) {
-    console.error("Moderation error:", error);
-  }
+const punish = async (ctx, normalizedPhone) => {
+  await banUser(ctx, {
+    reason: "unallowed_contact",
+    matchedNumber: normalizedPhone,
+  });
 };
 
 const checkContactNumber = async (ctx) => {
@@ -35,7 +24,7 @@ const checkContactNumber = async (ctx) => {
   );
 
   if (!allowedSet.has(normalized)) {
-    await punish(ctx);
+    await punish(ctx, normalized);
     return true;
   }
 

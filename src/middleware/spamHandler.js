@@ -1,4 +1,4 @@
-const Admin = require("../models/Admin");
+const { banUser, isExempt } = require("../services/banService");
 
 const max_Spam_Count = 3;
 const SPAM_WINDOW_MS = 10 * 60 * 1000;
@@ -10,9 +10,7 @@ const spamTracker = new Map();
 const cleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, data] of spamTracker.entries()) {
-    if (now - data.lastTime > ENTRY_TTL_MS) {
-      spamTracker.delete(key);
-    }
+    if (now - data.lastTime > ENTRY_TTL_MS) spamTracker.delete(key);
   }
 }, CLEANUP_INTERVAL_MS);
 
@@ -29,11 +27,6 @@ const getSpamContent = (ctx) => {
     return { type: "photo", content: `photo:${largest.file_unique_id}` };
   }
   return null;
-};
-
-const isAdmin = async (userId) => {
-  const admin = await Admin.findOne({ telegramId: userId });
-  return !!admin;
 };
 
 const spamHandler = async (ctx, next) => {
@@ -74,34 +67,26 @@ const spamHandler = async (ctx, next) => {
 
   if (data.count < max_Spam_Count) return next();
 
-  if (await isAdmin(ctx.from.id)) {
+  if (await isExempt(ctx)) {
     spamTracker.delete(key);
     return next();
   }
 
-  try {
-    await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
-      revoke_messages: true,
-    });
-
-    for (const id of data.messageIds) {
-      try {
-        await ctx.telegram.deleteMessage(ctx.chat.id, id);
-        console.log(
-          `Deleted message ${id} from user ${ctx.from.id} due to spam`,
-        );
-      } catch (error) {
-        console.error(`Failed to delete message ${id}:`, error);
-      }
+  for (const id of data.messageIds) {
+    if (id === ctx.message.message_id) continue;
+    try {
+      await ctx.telegram.deleteMessage(ctx.chat.id, id);
+    } catch (error) {
+      console.error(`Failed to delete message ${id}:`, error);
     }
-
-    spamTracker.delete(key);
-    return;
-  } catch (error) {
-    console.error(error);
-    spamTracker.delete(key);
-    return next();
   }
+
+  spamTracker.delete(key);
+  await banUser(ctx, {
+    reason: "spam",
+    extra: { spamCount: data.count },
+  });
+  return;
 };
 
 module.exports = { spamHandler };

@@ -1,5 +1,6 @@
 const NumberModel = require("../models/Number");
 const { normalizeNumber } = require("../normalization/normalizeNumber");
+const { banUser } = require("../services/banService");
 
 const stripUrls = (text) =>
   text
@@ -65,24 +66,8 @@ const isAllowedNumber = async (ctx, next) => {
     const isLong = seq.length >= 10;
     if (!isLong) continue;
 
-    try {
-      await ctx.deleteMessage();
-      await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
-        revoke_messages: true,
-      });
-
-      const username = ctx.from.username
-        ? `@${ctx.from.username}`
-        : "unknown user";
-
-      console.log(
-        `${ctx.from.id}, (${username}) got banned because of unallowed number: ${seq}`,
-      );
-      return;
-    } catch (error) {
-      console.error("Error banning user:", error);
-      return next();
-    }
+    await banUser(ctx, { reason: "unallowed_number", matchedNumber: seq });
+    return;
   }
 
   await next();

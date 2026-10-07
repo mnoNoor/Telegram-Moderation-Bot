@@ -1,8 +1,8 @@
 const BanWord = require("../models/BanWord");
 const NumberModel = require("../models/Number");
-const Admin = require("../models/Admin");
 const { normalize } = require("../normalization/normalizedText");
 const { normalizeNumber } = require("../normalization/normalizeNumber");
+const { banUser, isExempt } = require("../services/banService");
 
 const SEPARATOR_CLASS =
   "[\\s.\\-_/\\\\|·•*~^`'\"`,;:\\u200B-\\u200F\\u202A-\\u202E]";
@@ -49,22 +49,15 @@ const checkUserName = async (ctx, next) => {
 
   if (!matchedWord && candidateNumbers.length === 0) return next();
 
-  const admin = await Admin.findOne({ telegramId: ctx.from.id });
-  if (admin) return next();
+  if (await isExempt(ctx)) return next();
 
   if (matchedWord) {
-    try {
-      await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
-        revoke_messages: true,
-      });
-      console.log(
-        `${fullName} (${ctx.from.id}) got banned because of banned word in their name: ${matchedWord}`,
-      );
-      return;
-    } catch (error) {
-      console.error("Ban error (word):", error);
-      return next();
-    }
+    await banUser(ctx, {
+      reason: "banned_name_word",
+      matchedWord,
+      skipDelete: true,
+    });
+    return;
   }
 
   const allowedNumbersDocs = await NumberModel.find();
@@ -84,18 +77,12 @@ const checkUserName = async (ctx, next) => {
 
     if (seq.length < 10) continue;
 
-    try {
-      await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
-        revoke_messages: true,
-      });
-      console.log(
-        `${fullName} (${ctx.from.id}) got banned because of unallowed number in their name: ${seq}`,
-      );
-      return;
-    } catch (error) {
-      console.error("Ban error (number):", error);
-      return next();
-    }
+    await banUser(ctx, {
+      reason: "banned_name_number",
+      matchedNumber: seq,
+      skipDelete: true,
+    });
+    return;
   }
 
   await next();

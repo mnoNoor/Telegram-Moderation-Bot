@@ -1,3 +1,5 @@
+const { banUser } = require("../services/banService");
+
 const bannedCharRegex = /[ڪטּﻳﺗ]/u;
 
 const isMessageCoded = async (ctx, next) => {
@@ -11,18 +13,7 @@ const isMessageCoded = async (ctx, next) => {
     const text = ctx.message.text;
 
     if (bannedCharRegex.test(text)) {
-      await ctx.deleteMessage();
-      await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
-        revoke_messages: true,
-      });
-
-      const username = ctx.from.username
-        ? `@${ctx.from.username}`
-        : "unknown user";
-
-      console.log(
-        `${ctx.from.id}, (${username}) got banned because of coded message`,
-      );
+      await banUser(ctx, { reason: "coded_message" });
       return;
     }
 
