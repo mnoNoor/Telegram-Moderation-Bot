@@ -20,7 +20,12 @@ bot.catch((err, ctx) => {
   console.error(`Error for ${ctx.updateType}:`, err);
 });
 
-bot.start((ctx) => ctx.reply("قد يتم إضافة ردود قريبا"));
+bot.hears(/^id$/i, async (ctx) => {
+  if (ctx.chat?.type !== "private") return;
+  await ctx.reply(`🆔 Your ID: \`${ctx.from.id}\``, {
+    parse_mode: "Markdown",
+  });
+});
 
 adminCommands(bot);
 
