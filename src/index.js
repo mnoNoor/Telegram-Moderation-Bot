@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const { Telegraf } = require("telegraf");
 const { startServer } = require("./server.js");
 const { adminCommands } = require("./admin/adminCommands.js");
@@ -14,10 +15,12 @@ const app = express();
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const port = process.env.PORT || 3000;
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
 app.use(express.json());
 
 bot.catch((err, ctx) => {
-  console.error(`Error for ${ctx.updateType}:`, err);
+  console.error(`❌ Error for ${ctx.updateType}:`, err);
 });
 
 bot.hears(/^id$/i, async (ctx) => {
@@ -43,7 +46,46 @@ app.get("/", (_, res) => {
   res.send("UPM Admin Bot is running!");
 });
 
-startServer(app, bot, port);
+startServer(app, bot, port).catch((err) => {
+  console.error("❌ startServer failed:", err);
+  process.exit(1);
+});
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+let shuttingDown = false;
+
+const shutdown = async (signal) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
+  console.log(`🛑 Received ${signal}, shutting down gracefully...`);
+
+  if (!IS_PRODUCTION) {
+    try {
+      bot.stop(signal);
+    } catch (err) {
+      console.error("bot.stop error:", err.message);
+    }
+  }
+
+  try {
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+      console.log("✅ MongoDB disconnected");
+    }
+  } catch (err) {
+    console.error("mongoose.disconnect error:", err.message);
+  }
+
+  setTimeout(() => process.exit(0), 500).unref();
+};
+
+process.once("SIGINT", () => shutdown("SIGINT"));
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️ Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ Uncaught Exception:", err);
+});
