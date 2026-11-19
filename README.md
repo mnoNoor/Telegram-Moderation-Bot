@@ -5,7 +5,8 @@ UPM Admin Bot is a Telegram moderation bot built for managing group safety, spam
 ## What it does
 
 - Detects repeated spam patterns in group chats
-- Blocks banned words and suspicious content
+- Blocks banned words in messages and member names
+- Checks new members' names for banned words and suspicious numbers
 - Allows trusted phone numbers and contacts
 - Detects coded or obfuscated text attempts
 - Verifies admin privileges for moderation actions
@@ -40,8 +41,10 @@ MONGO_URI=mongodb://localhost:27017/upm-admin
 NODE_ENV=development
 PORT=3000
 
-# Optional: used in production webhook mode
+# Required when NODE_ENV=production
 WEBHOOK_BASE_URL=https://your-domain.com
+
+# Optional: protects the webhook endpoint when configured
 WEBHOOK_SECRET=your_random_secret
 ```
 
@@ -55,13 +58,13 @@ npm install
 
 2. Configure the super-admin account.
 
-Open `src/admin/addAdmin.js` and update `SUPER_ADMIN_ID` with your Telegram user ID, then run:
+Set `SUPER_ADMIN_ID` in `src/admin/addAdmin.js` to your Telegram user ID, then run:
 
 ```bash
 node --env-file=.env src/admin/addAdmin.js
 ```
 
-This creates the first super-admin record in MongoDB.
+This creates the super-admin record in MongoDB if it does not already exist.
 
 3. Start the bot:
 
@@ -85,21 +88,24 @@ For Render, Railway, Fly.io, or similar hosting:
    - `MONGO_URI`
    - `NODE_ENV=production`
    - `WEBHOOK_BASE_URL=https://your-app.example.com`
-   - `WEBHOOK_SECRET=some-random-secret`
+   - `WEBHOOK_SECRET=some-random-secret` (recommended)
 5. Deploy.
 
-In production, the bot registers a Telegram webhook automatically using `WEBHOOK_BASE_URL` and `WEBHOOK_SECRET`.
+In production, the bot registers a Telegram webhook at
+`<WEBHOOK_BASE_URL>/telegram-webhook`. If `WEBHOOK_SECRET` is set, requests
+without the matching Telegram secret-token header are rejected.
 
 ## Moderation flow
 
-Incoming messages are processed in this order:
+Group messages are processed in this order:
 
-- username validation
-- message cleanup / read handling
+- checks for newly joined members
+- checks the sender's name
+- checks message text and captions for banned words
 - spam detection
-- allowed-number check
+- checks for unallowed phone numbers
 - coded-message detection
-- allowed-contact check
+- checks shared contacts for unallowed numbers
 
 ## Admin commands
 
@@ -108,7 +114,7 @@ Run `/admin` in a private chat with an authorized admin account.
 Useful commands and behavior:
 
 - `/admin` — open the private admin panel
-- `/id` — return the sender's Telegram user ID in private chat
+- Send `id` (without a slash) in a private chat — return your Telegram user ID
 - Super-admins receive notification messages when a user is banned for spam, banned words, unallowed numbers, or other moderation reasons
 - The admin panel supports:
   - Add/remove banned words
@@ -127,6 +133,7 @@ src/
 ├── config/
 │   └── db.js
 ├── middleware/
+│   ├── checkNewMembers.js
 │   ├── allowedContact.js
 │   ├── allowedNumbers.js
 │   ├── checkUserName.js
@@ -138,20 +145,21 @@ src/
 │   ├── BanWord.js
 │   └── Number.js
 ├── normalization/
+│   ├── matchNumber.js
+│   ├── matchesBannedWord.js
 │   ├── normalizeNumber.js
 │   └── normalizedText.js
 ├── services/
 │   └── banService.js
 ├── index.js
-├── server.js
-└── ...
+└── server.js
 ```
 
 ## Notes
 
 - The project uses MongoDB for storing banned words, allowed numbers, and admin records.
 - Telegram private admin panel actions are controlled through the `Admin` model and role checks.
-- For local development, `BOT_TOKEN` and `MONGO_URI` are enough to run the bot in polling mode.
+- For local development, `BOT_TOKEN` and `MONGO_URI` are enough to run the bot in polling mode. `PORT` defaults to `3000`.
 
 ## License
 

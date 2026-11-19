@@ -3,6 +3,8 @@ const NumberModel = require("../models/Number");
 const { normalize } = require("../normalization/normalizedText");
 const { normalizeNumber } = require("../normalization/normalizeNumber");
 const { banUser, isExempt } = require("../services/banService");
+const { matchesBannedWord } = require("../normalization/matchesBannedWord");
+const { containsAllowedNumber } = require("../normalization/matchNumber");
 
 const SEPARATOR_CLASS =
   "[\\s.\\-_/\\\\|·•*~^`'\"`,;:\\u200B-\\u200F\\u202A-\\u202E]";
@@ -20,6 +22,7 @@ const looksLikeSpam = (seq) => /^(\d)\1{7,}$/.test(seq);
 
 const checkUserName = async (ctx, next) => {
   if (!ctx.from) return next();
+  if (ctx.message?.new_chat_members) return next();
 
   const isGroupChat =
     ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
@@ -36,8 +39,8 @@ const checkUserName = async (ctx, next) => {
   const bannedWords = bannedWordsDocs.map((b) =>
     normalize(b.word.toLowerCase()),
   );
-  const matchedWord = bannedWords.find(
-    (word) => word && normalizedName.includes(word),
+  const matchedWord = bannedWords.find((word) =>
+    matchesBannedWord(normalizedName, word),
   );
 
   const rawSequences = fullName.match(NUMBER_REGEX) || [];
@@ -66,14 +69,7 @@ const checkUserName = async (ctx, next) => {
   );
 
   for (const seq of candidateNumbers) {
-    let containsAllowed = false;
-    for (const allowed of allowedSet) {
-      if (seq.includes(allowed)) {
-        containsAllowed = true;
-        break;
-      }
-    }
-    if (containsAllowed) continue;
+    if (containsAllowedNumber(seq, allowedSet)) continue;
 
     if (seq.length < 10) continue;
 

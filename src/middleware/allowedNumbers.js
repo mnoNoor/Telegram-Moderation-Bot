@@ -1,6 +1,9 @@
 const NumberModel = require("../models/Number");
 const { normalizeNumber } = require("../normalization/normalizeNumber");
+const { containsAllowedNumber } = require("../normalization/matchNumber");
 const { banUser } = require("../services/banService");
+
+const getMessageText = (ctx) => ctx.message?.text ?? ctx.message?.caption;
 
 const stripUrls = (text) =>
   text
@@ -12,61 +15,91 @@ const stripUrls = (text) =>
       " ",
     );
 
+// ASCII digits: 0-9
+const convertDigits = (text) =>
+  text
+    .replace(/[٠-٩]/g, (d) =>
+      String.fromCharCode(d.charCodeAt(0) - 0x0660 + 48),
+    )
+    .replace(/[۰-۹]/g, (d) =>
+      String.fromCharCode(d.charCodeAt(0) - 0x06f0 + 48),
+    );
+
 const SEPARATOR_CLASS =
-  "[\\s.\\-_/\\\\|·•*~^`'\"`,;:\\u200B-\\u200F\\u202A-\\u202E]";
+  "[\\s.\\-_/\\\\|·•*~^`'\"`,;:()\\u200B-\\u200F\\u202A-\\u202E]";
 
 const collapseSeparatorsBetweenDigits = (text) => {
-  const re = new RegExp(`([0-9٠-٩۰-۹])${SEPARATOR_CLASS}+(?=[0-9٠-٩۰-۹])`, "g");
+  const re = new RegExp(`([0-9])${SEPARATOR_CLASS}+(?=[0-9])`, "g");
   return text.replace(re, "$1");
 };
 
-const NUMBER_REGEX = /(?<![a-zA-Z])[0-9٠-٩۰-۹]{8,15}(?![a-zA-Z])/g;
+// Global regex to match phone numbers in various formats
+const COUNTRY_CODES = [
+  "966",
+  "963",
+  "971",
+  "962",
+  "965",
+  "964",
+  "968",
+  "967",
+  "974",
+  "973",
+  "961",
+  "970",
+  "212",
+  "213",
+  "216",
+  "218",
+  "249",
+];
 
-const looksLikeDate = (seq) =>
-  /^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/.test(seq) ||
-  /^(0[1-9]|[12]\d|3[01])(0[1-9]|1[0-2])(19|20)\d{2}$/.test(seq);
+const PHONE_REGEX = new RegExp(
+  [
+    // +966501234567
+    `(?<![0-9])\\+[0-9]{7,15}(?![0-9])`,
+    // 00966501234567
+    `(?<![0-9])00[0-9]{7,13}(?![0-9])`,
+    // 0501234567 / 0112345678
+    `(?<![0-9])0[0-9]{9,10}(?![0-9])`,
+    // 966501234567 / 963912345678
+    `(?<![0-9])(?:${COUNTRY_CODES.join("|")})[1-9][0-9]{6,9}(?![0-9])`,
+  ].join("|"),
+  "g",
+);
 
-const looksLikeSpam = (seq) => /^(\d)\1{7,}$/.test(seq);
+const extractPhoneNumbers = (line) => {
+  const collapsed = collapseSeparatorsBetweenDigits(line);
+  const matches = collapsed.match(PHONE_REGEX) || [];
+  return matches.map((m) => normalizeNumber(m));
+};
 
 const isAllowedNumber = async (ctx, next) => {
-  if (!ctx.message?.text) return next();
+  const text = getMessageText(ctx);
+  if (!text) return next();
 
   const isGroupChat =
     ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
   if (!isGroupChat) return next();
 
-  let cleaned = stripUrls(ctx.message.text);
-  cleaned = collapseSeparatorsBetweenDigits(cleaned);
+  const cleaned = convertDigits(stripUrls(text));
 
-  const rawSequences = cleaned.match(NUMBER_REGEX) || [];
-  const numberSequences = rawSequences
-    .map(normalizeNumber)
-    .filter((s) => s.length >= 8)
-    .filter((s) => !looksLikeDate(s))
-    .filter((s) => !looksLikeSpam(s));
+  const phoneNumbers = cleaned.split(/\r?\n/).flatMap(extractPhoneNumbers);
 
-  if (numberSequences.length === 0) return next();
+  if (phoneNumbers.length === 0) return next();
 
   const allowed = await NumberModel.find();
   const allowedSet = new Set(
     allowed.map((n) => normalizeNumber(n.value.toString())),
   );
 
-  for (const seq of numberSequences) {
-    let containsAllowed = false;
-    for (const allowedNum of allowedSet) {
-      if (seq.includes(allowedNum)) {
-        containsAllowed = true;
-        break;
-      }
-    }
+  for (const seq of phoneNumbers) {
+    if (containsAllowedNumber(seq, allowedSet)) continue;
 
-    if (containsAllowed) continue;
-
-    const isLong = seq.length >= 10;
-    if (!isLong) continue;
-
-    await banUser(ctx, { reason: "unallowed_number", matchedNumber: seq });
+    await banUser(ctx, {
+      reason: "unallowed_number",
+      matchedNumber: seq,
+    });
     return;
   }
 

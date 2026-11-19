@@ -13,6 +13,14 @@ const adminCommands = (bot) => {
 
   const PAGE_SIZE = 10;
 
+  const privateOnly = (handler) => async (ctx, next) => {
+    if (ctx.chat?.type !== "private") return next();
+    return handler(ctx, next);
+  };
+
+  const hearsPrivate = (trigger, handler) =>
+    bot.hears(trigger, privateOnly(handler));
+
   const getAdmin = async (userId) =>
     await Admin.findOne({ telegramId: userId });
 
@@ -158,6 +166,24 @@ const adminCommands = (bot) => {
     await ctx.answerCbQuery();
     await ctx.deleteMessage().catch(() => {});
     await ctx.reply("📞 Numbers Management", numbersReplyKeyboard());
+  });
+
+  bot.action(/^unban:(-?\d+):(\d+)$/, async (ctx) => {
+    if (!(await requireSuperAdmin(ctx))) return;
+
+    const chatId = Number(ctx.match[1]);
+    const userId = Number(ctx.match[2]);
+
+    try {
+      await ctx.telegram.unbanChatMember(chatId, userId, {
+        only_if_banned: true,
+      });
+      await ctx.answerCbQuery("✅ تم فك الحظر");
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    } catch (error) {
+      console.error("unban failed:", error.message);
+      await ctx.answerCbQuery("❌ فشل فك الحظر", { show_alert: true });
+    }
   });
 
   bot.action("menu_admins", async (ctx) => {
@@ -531,7 +557,7 @@ const adminCommands = (bot) => {
       .catch(() => {});
   });
 
-  bot.hears("❌ Cancel", async (ctx, next) => {
+  hearsPrivate("❌ Cancel", async (ctx, next) => {
     const userId = ctx.from.id;
 
     if (waitingForBanPhrase[userId]) {
@@ -553,6 +579,241 @@ const adminCommands = (bot) => {
     }
 
     return next();
+  });
+
+  hearsPrivate("📝 Ban Words", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    await ctx.reply("📝 Ban Words Management", banWordsReplyKeyboard());
+  });
+
+  hearsPrivate("📞 Numbers", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    await ctx.reply("📞 Numbers Management", numbersReplyKeyboard());
+  });
+
+  hearsPrivate("👥 Admins", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin || admin.role !== "superAdmin") {
+      return ctx.reply("❌ SuperAdmin only");
+    }
+    await ctx.reply("👥 Admins Management", adminsReplyKeyboard());
+  });
+
+  hearsPrivate("📊 Stats", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    await ctx.reply("📊 Statistics", statsReplyKeyboard());
+  });
+
+  hearsPrivate("➕ Add Ban Word", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    waitingForBanPhrase[ctx.from.id] = true;
+    await ctx.reply(
+      "✍️ Send the word or phrase you want to ban:",
+      cancelReplyKeyboard(),
+    );
+  });
+
+  hearsPrivate("📋 Ban Words List", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+
+    const words = await BanWord.find().sort({ word: 1 }).lean();
+    if (!words.length) {
+      return ctx.reply("📋 No ban words yet.", banWordsReplyKeyboard());
+    }
+
+    const list = words.map((w) => w.word);
+    await ctx.reply(
+      `📋 Ban Words (${words.length}):`,
+      buildPaginatedListKeyboard(
+        list,
+        0,
+        "banword_list",
+        null,
+        "menu_banwords",
+      ),
+    );
+  });
+
+  hearsPrivate("🗑️ Remove Ban Word", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+
+    const words = await BanWord.find().sort({ word: 1 }).lean();
+    if (!words.length) {
+      return ctx.reply("📋 No ban words to remove.", banWordsReplyKeyboard());
+    }
+
+    listSessions[ctx.from.id] = {
+      type: "banword",
+      ids: words.map((w) => w._id.toString()),
+    };
+
+    const list = words.map((w) => w.word);
+    await ctx.reply(
+      `🗑️ Tap a word to remove it (${words.length}):`,
+      buildPaginatedListKeyboard(
+        list,
+        0,
+        "banword_remove_list",
+        "banword_del",
+        "menu_banwords",
+      ),
+    );
+  });
+
+  hearsPrivate("➕ Add Number", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    waitingForAllowedNumber[ctx.from.id] = true;
+    await ctx.reply(
+      "🔢 Send the number you want to allow:",
+      cancelReplyKeyboard(),
+    );
+  });
+
+  hearsPrivate("📋 Numbers List", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+
+    const numbers = await NumberModel.find().sort({ value: 1 }).lean();
+    if (!numbers.length) {
+      return ctx.reply("📋 No allowed numbers yet.", numbersReplyKeyboard());
+    }
+
+    const list = numbers.map((n) => n.value);
+    await ctx.reply(
+      `📋 Allowed Numbers (${numbers.length}):`,
+      buildPaginatedListKeyboard(list, 0, "number_list", null, "menu_numbers"),
+    );
+  });
+
+  hearsPrivate("🗑️ Remove Number", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+
+    const numbers = await NumberModel.find().sort({ value: 1 }).lean();
+    if (!numbers.length) {
+      return ctx.reply("📋 No numbers to remove.", numbersReplyKeyboard());
+    }
+
+    listSessions[ctx.from.id] = {
+      type: "number",
+      ids: numbers.map((n) => n._id.toString()),
+    };
+
+    const list = numbers.map((n) => n.value);
+    await ctx.reply(
+      `🗑️ Tap a number to remove it (${numbers.length}):`,
+      buildPaginatedListKeyboard(
+        list,
+        0,
+        "number_remove_list",
+        "number_del",
+        "menu_numbers",
+      ),
+    );
+  });
+
+  hearsPrivate("➕ Add Admin", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin || admin.role !== "superAdmin") {
+      return ctx.reply("❌ SuperAdmin only");
+    }
+    waitingForAdminId[ctx.from.id] = true;
+    await ctx.reply(
+      "👤 Send the Telegram ID of the new admin:",
+      cancelReplyKeyboard(),
+    );
+  });
+
+  hearsPrivate("📋 Admins List", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin || admin.role !== "superAdmin") {
+      return ctx.reply("❌ SuperAdmin only");
+    }
+
+    const admins = await Admin.find().sort({ telegramId: 1 }).lean();
+    if (!admins.length) {
+      return ctx.reply("📋 No admins yet.", adminsReplyKeyboard());
+    }
+
+    const lines = admins
+      .map((a, i) => `${i + 1}. ${a.telegramId} — ${a.role}`)
+      .join("\n");
+
+    await ctx.reply(
+      `👥 Admins (${admins.length}):\n\n${lines}`,
+      adminsReplyKeyboard(),
+    );
+  });
+
+  hearsPrivate("🗑️ Remove Admin", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin || admin.role !== "superAdmin") {
+      return ctx.reply("❌ SuperAdmin only");
+    }
+
+    const admins = await Admin.find().sort({ telegramId: 1 }).lean();
+    if (!admins.length) {
+      return ctx.reply("📋 No admins to remove.", adminsReplyKeyboard());
+    }
+
+    listSessions[ctx.from.id] = {
+      type: "admin",
+      ids: admins.map((a) => a._id.toString()),
+    };
+
+    const rows = admins.map((a, idx) => [
+      Markup.button.callback(
+        `🗑️ ${a.telegramId} (${a.role})`,
+        `admin_del:${idx}`,
+      ),
+    ]);
+    rows.push([
+      Markup.button.callback("⬅️ Back", "menu_admins"),
+      Markup.button.callback("❌ Close", "menu_close"),
+    ]);
+
+    await ctx.reply(
+      `🗑️ Tap an admin to remove it (${admins.length}):`,
+      Markup.inlineKeyboard(rows),
+    );
+  });
+
+  hearsPrivate("📝 Ban Words Stats", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    const count = await BanWord.countDocuments();
+    await ctx.reply(`📝 Ban Words: ${count}`, statsReplyKeyboard());
+  });
+
+  hearsPrivate("📞 Numbers Stats", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    const count = await NumberModel.countDocuments();
+    await ctx.reply(`📞 Allowed Numbers: ${count}`, statsReplyKeyboard());
+  });
+
+  hearsPrivate("👥 Admins Stats", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    const count = await Admin.countDocuments();
+    await ctx.reply(`👥 Admins: ${count}`, statsReplyKeyboard());
+  });
+
+  hearsPrivate("⬅️ Back", async (ctx) => {
+    const admin = await getAdmin(ctx.from.id);
+    if (!admin) return ctx.reply("❌ Not authorized");
+    await ctx.reply("⚙️ Admin Panel", mainReplyKeyboard());
+  });
+
+  hearsPrivate("❌ Close", async (ctx) => {
+    await ctx.reply("تم الإغلاق", Markup.removeKeyboard());
   });
 
   bot.on("text", async (ctx, next) => {
@@ -664,241 +925,6 @@ const adminCommands = (bot) => {
     }
 
     return next();
-  });
-
-  bot.hears("📝 Ban Words", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-    await ctx.reply("📝 Ban Words Management", banWordsReplyKeyboard());
-  });
-
-  bot.hears("📞 Numbers", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-    await ctx.reply("📞 Numbers Management", numbersReplyKeyboard());
-  });
-
-  bot.hears("👥 Admins", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin || admin.role !== "superAdmin") {
-      return ctx.reply("❌ SuperAdmin only");
-    }
-    await ctx.reply("👥 Admins Management", adminsReplyKeyboard());
-  });
-
-  bot.hears("📊 Stats", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-    await ctx.reply("📊 Statistics", statsReplyKeyboard());
-  });
-
-  bot.hears("➕ Add Ban Word", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-    waitingForBanPhrase[ctx.from.id] = true;
-    await ctx.reply(
-      "✍️ Send the word or phrase you want to ban:",
-      cancelReplyKeyboard(),
-    );
-  });
-
-  bot.hears("📋 Ban Words List", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-
-    const words = await BanWord.find().sort({ word: 1 }).lean();
-    if (!words.length) {
-      return ctx.reply("📋 No ban words yet.", banWordsReplyKeyboard());
-    }
-
-    const list = words.map((w) => w.word);
-    await ctx.reply(
-      `📋 Ban Words (${words.length}):`,
-      buildPaginatedListKeyboard(
-        list,
-        0,
-        "banword_list",
-        null,
-        "menu_banwords",
-      ),
-    );
-  });
-
-  bot.hears("🗑️ Remove Ban Word", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-
-    const words = await BanWord.find().sort({ word: 1 }).lean();
-    if (!words.length) {
-      return ctx.reply("📋 No ban words to remove.", banWordsReplyKeyboard());
-    }
-
-    listSessions[ctx.from.id] = {
-      type: "banword",
-      ids: words.map((w) => w._id.toString()),
-    };
-
-    const list = words.map((w) => w.word);
-    await ctx.reply(
-      `🗑️ Tap a word to remove it (${words.length}):`,
-      buildPaginatedListKeyboard(
-        list,
-        0,
-        "banword_remove_list",
-        "banword_del",
-        "menu_banwords",
-      ),
-    );
-  });
-
-  bot.hears("➕ Add Number", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-    waitingForAllowedNumber[ctx.from.id] = true;
-    await ctx.reply(
-      "🔢 Send the number you want to allow:",
-      cancelReplyKeyboard(),
-    );
-  });
-
-  bot.hears("📋 Numbers List", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-
-    const numbers = await NumberModel.find().sort({ value: 1 }).lean();
-    if (!numbers.length) {
-      return ctx.reply("📋 No allowed numbers yet.", numbersReplyKeyboard());
-    }
-
-    const list = numbers.map((n) => n.value);
-    await ctx.reply(
-      `📋 Allowed Numbers (${numbers.length}):`,
-      buildPaginatedListKeyboard(list, 0, "number_list", null, "menu_numbers"),
-    );
-  });
-
-  bot.hears("🗑️ Remove Number", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-
-    const numbers = await NumberModel.find().sort({ value: 1 }).lean();
-    if (!numbers.length) {
-      return ctx.reply("📋 No numbers to remove.", numbersReplyKeyboard());
-    }
-
-    listSessions[ctx.from.id] = {
-      type: "number",
-      ids: numbers.map((n) => n._id.toString()),
-    };
-
-    const list = numbers.map((n) => n.value);
-    await ctx.reply(
-      `🗑️ Tap a number to remove it (${numbers.length}):`,
-      buildPaginatedListKeyboard(
-        list,
-        0,
-        "number_remove_list",
-        "number_del",
-        "menu_numbers",
-      ),
-    );
-  });
-
-  bot.hears("➕ Add Admin", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin || admin.role !== "superAdmin") {
-      return ctx.reply("❌ SuperAdmin only");
-    }
-    waitingForAdminId[ctx.from.id] = true;
-    await ctx.reply(
-      "👤 Send the Telegram ID of the new admin:",
-      cancelReplyKeyboard(),
-    );
-  });
-
-  bot.hears("📋 Admins List", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin || admin.role !== "superAdmin") {
-      return ctx.reply("❌ SuperAdmin only");
-    }
-
-    const admins = await Admin.find().sort({ telegramId: 1 }).lean();
-    if (!admins.length) {
-      return ctx.reply("📋 No admins yet.", adminsReplyKeyboard());
-    }
-
-    const lines = admins
-      .map((a, i) => `${i + 1}. ${a.telegramId} — ${a.role}`)
-      .join("\n");
-
-    await ctx.reply(
-      `👥 Admins (${admins.length}):\n\n${lines}`,
-      adminsReplyKeyboard(),
-    );
-  });
-
-  bot.hears("🗑️ Remove Admin", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin || admin.role !== "superAdmin") {
-      return ctx.reply("❌ SuperAdmin only");
-    }
-
-    const admins = await Admin.find().sort({ telegramId: 1 }).lean();
-    if (!admins.length) {
-      return ctx.reply("📋 No admins to remove.", adminsReplyKeyboard());
-    }
-
-    listSessions[ctx.from.id] = {
-      type: "admin",
-      ids: admins.map((a) => a._id.toString()),
-    };
-
-    const rows = admins.map((a, idx) => [
-      Markup.button.callback(
-        `🗑️ ${a.telegramId} (${a.role})`,
-        `admin_del:${idx}`,
-      ),
-    ]);
-    rows.push([
-      Markup.button.callback("⬅️ Back", "menu_admins"),
-      Markup.button.callback("❌ Close", "menu_close"),
-    ]);
-
-    await ctx.reply(
-      `🗑️ Tap an admin to remove it (${admins.length}):`,
-      Markup.inlineKeyboard(rows),
-    );
-  });
-
-  bot.hears("📝 Ban Words Stats", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-    const count = await BanWord.countDocuments();
-    await ctx.reply(`📝 Ban Words: ${count}`, statsReplyKeyboard());
-  });
-
-  bot.hears("📞 Numbers Stats", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-    const count = await NumberModel.countDocuments();
-    await ctx.reply(`📞 Allowed Numbers: ${count}`, statsReplyKeyboard());
-  });
-
-  bot.hears("👥 Admins Stats", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-    const count = await Admin.countDocuments();
-    await ctx.reply(`👥 Admins: ${count}`, statsReplyKeyboard());
-  });
-
-  bot.hears("⬅️ Back", async (ctx) => {
-    const admin = await getAdmin(ctx.from.id);
-    if (!admin) return ctx.reply("❌ Not authorized");
-    await ctx.reply("⚙️ Admin Panel", mainReplyKeyboard());
-  });
-
-  bot.hears("❌ Close", async (ctx) => {
-    await ctx.reply("تم الإغلاق", Markup.removeKeyboard());
   });
 };
 

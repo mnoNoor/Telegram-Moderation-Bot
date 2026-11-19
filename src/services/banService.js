@@ -31,12 +31,10 @@ const cleanupInterval = setInterval(() => {
 
 if (cleanupInterval.unref) cleanupInterval.unref();
 
-const isTelegramGroupAdmin = async (ctx) => {
+const isTelegramGroupAdmin = async (ctx, userId = ctx.from?.id) => {
   const chatId = ctx.chat?.id;
-  const userId = ctx.from?.id;
 
   if (!userId) return true;
-
   if (userId === chatId) return true;
 
   const key = `${chatId}:${userId}`;
@@ -68,29 +66,29 @@ const isBotAdmin = async (userId) => {
   return !!admin;
 };
 
-const isExempt = async (ctx) => {
-  if (await isTelegramGroupAdmin(ctx)) return true;
-  if (await isBotAdmin(ctx.from?.id)) return true;
+const isExempt = async (ctx, user = ctx.from) => {
+  if (await isTelegramGroupAdmin(ctx, user?.id)) return true;
+  if (await isBotAdmin(user?.id)) return true;
   return false;
 };
 
 const buildNotification = ({
   ctx,
+  user = ctx.from,
   reason,
   matchedWord,
   matchedNumber,
   extra,
 }) => {
-  const user = ctx.from || {};
-  const name =
-    [user.first_name, user.last_name].filter(Boolean).join(" ") || "—";
-  const username = user.username ? `@${user.username}` : "—";
+  const u = user || {};
+  const name = [u.first_name, u.last_name].filter(Boolean).join(" ") || "—";
+  const username = u.username ? `@${u.username}` : "—";
 
   const lines = [
     "🚫 <b>حظر عضو</b>",
     "",
     `👤 الاسم: ${escapeHtml(name)}`,
-    `🆔 <code>${user.id ?? "—"}</code>`,
+    `🆔 <code>${u.id ?? "—"}</code>`,
     `🔗 ${escapeHtml(username)}`,
     "",
     `📌 السبب: ${REASON_LABELS[reason] || reason}`,
@@ -102,8 +100,10 @@ const buildNotification = ({
     lines.push(`🔢 المطابق: <code>${escapeHtml(matchedNumber)}</code>`);
   if (extra?.spamCount) lines.push(`🔁 التكرار: ${extra.spamCount}`);
 
-  if (ctx.message?.text) {
-    const cleanText = cleanInvisible(ctx.message.text).slice(0, 300);
+  const messageText = ctx.message?.text ?? ctx.message?.caption;
+
+  if (messageText) {
+    const cleanText = cleanInvisible(messageText).slice(0, 300);
     lines.push(
       "",
       "💬 الرسالة:",
@@ -111,10 +111,24 @@ const buildNotification = ({
     );
   }
 
-  return lines.join("\n");
+  const keyboard =
+    u.id && ctx.chat?.id
+      ? {
+          inline_keyboard: [
+            [
+              {
+                text: "🔓 فك الحظر",
+                callback_data: `unban:${ctx.chat.id}:${u.id}`,
+              },
+            ],
+          ],
+        }
+      : undefined;
+
+  return { text: lines.join("\n"), keyboard };
 };
 
-const notifySuperAdmins = async (ctx, message) => {
+const notifySuperAdmins = async (ctx, message, replyMarkup) => {
   try {
     const superAdmins = await Admin.find({ role: "superAdmin" }).lean();
     if (!superAdmins.length) return;
@@ -125,6 +139,7 @@ const notifySuperAdmins = async (ctx, message) => {
           .sendMessage(admin.telegramId, message, {
             parse_mode: "HTML",
             link_preview_options: { is_disabled: true },
+            ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
           })
           .catch((error) => {
             console.error(
@@ -141,44 +156,55 @@ const notifySuperAdmins = async (ctx, message) => {
 
 const banUser = async (
   ctx,
-  { reason, matchedWord, matchedNumber, extra, skipDelete = false },
+  {
+    reason,
+    matchedWord,
+    matchedNumber,
+    extra,
+    skipDelete = false,
+    targetUser = null,
+  },
 ) => {
-  if (await isExempt(ctx)) {
-    const id = ctx.from?.id ?? "anonymous";
+  const user = targetUser || ctx.from;
+
+  if (await isExempt(ctx, user)) {
+    const id = user?.id ?? "anonymous";
     console.log(`⏭️ Skip ban — ${id} is exempt (${reason})`);
     return;
   }
 
-  if (!skipDelete) {
+  if (!skipDelete && !targetUser) {
     try {
       await ctx.deleteMessage();
     } catch (_) {}
   }
 
   try {
-    await ctx.telegram.banChatMember(ctx.chat.id, ctx.from.id, {
+    await ctx.telegram.banChatMember(ctx.chat.id, user.id, undefined, {
       revoke_messages: true,
     });
   } catch (error) {
-    console.error(`Failed to ban ${ctx.from.id}:`, error.message);
+    console.error(`Failed to ban ${user.id}:`, error.message);
     return;
   }
 
-  const username = ctx.from.username ? `@${ctx.from.username}` : "no-username";
+  const username = user.username ? `@${user.username}` : "no-username";
   console.log(
-    `🚫 Banned ${ctx.from.id} (${username}) — ${reason}` +
+    `🚫 Banned ${user.id} (${username}) — ${reason}` +
       (matchedWord ? ` | word: ${matchedWord}` : "") +
       (matchedNumber ? ` | number: ${matchedNumber}` : ""),
   );
 
-  const message = buildNotification({
+  const { text, keyboard } = buildNotification({
     ctx,
+    user,
     reason,
     matchedWord,
     matchedNumber,
     extra,
   });
-  await notifySuperAdmins(ctx, message);
+
+  await notifySuperAdmins(ctx, text, keyboard);
 };
 
 module.exports = { banUser, isExempt };

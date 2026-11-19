@@ -1,14 +1,16 @@
 const BanWord = require("../models/BanWord");
 const { normalize } = require("../normalization/normalizedText");
 const { banUser } = require("../services/banService");
+const { matchesBannedWord } = require("../normalization/matchesBannedWord");
 
 const readMessages = async (ctx, next) => {
-  if (!ctx.message?.text) return next();
+  const text = ctx.message?.text ?? ctx.message?.caption;
+  if (!text) return next();
 
   const isGroup = ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
   if (!isGroup) return next();
 
-  const normalizedText = normalize(ctx.message.text.toLowerCase());
+  const normalizedText = normalize(text.toLowerCase());
 
   const blockedWordsDocs = await BanWord.find();
   const blockedWords = blockedWordsDocs.map((b) =>
@@ -16,9 +18,7 @@ const readMessages = async (ctx, next) => {
   );
 
   for (const word of blockedWords) {
-    if (!word) continue;
-
-    if (normalizedText.includes(word)) {
+    if (matchesBannedWord(normalizedText, word)) {
       await banUser(ctx, { reason: "banned_word", matchedWord: word });
       return;
     }

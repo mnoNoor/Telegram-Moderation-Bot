@@ -1,6 +1,7 @@
 const NumberModel = require("../models/Number");
 const { normalizeNumber } = require("../normalization/normalizeNumber");
 const { banUser } = require("../services/banService");
+const { containsAllowedNumber } = require("../normalization/matchNumber");
 
 const isGroup = (ctx) =>
   ctx.chat?.type === "group" || ctx.chat?.type === "supergroup";
@@ -23,7 +24,7 @@ const checkContactNumber = async (ctx) => {
     allowed.map((n) => normalizeNumber(n.value.toString())),
   );
 
-  if (!allowedSet.has(normalized)) {
+  if (!containsAllowedNumber(normalized, allowedSet)) {
     await punish(ctx, normalized);
     return true;
   }
